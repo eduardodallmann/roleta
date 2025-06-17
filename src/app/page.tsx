@@ -1,143 +1,146 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { PersonList } from '~/components/person-list';
+import { Roulette } from '~/components/roulette';
+import type { Pessoa } from '~/types/pessoa';
 
 export default function Home() {
-  const [names, setNames] = useState([
-    'João',
-    'Maria',
-    'Pedro',
-    'Ana',
-    'Carlos',
-    'Lucia',
-  ]);
-  const [textareaValue, setTextareaValue] = useState(
-    'João\nMaria\nPedro\nAna\nCarlos\nLucia',
-  );
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [rotation, setRotation] = useState(0);
-  const [winner, setWinner] = useState('');
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [isSpinning, setIsSpinning] = useState<boolean>(false);
+  const [rotation, setRotation] = useState<number>(0);
+  const [winner, setWinner] = useState<Pessoa | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const animationRef = useRef<number | null>(null);
 
-  // Cores para as fatias da roleta
-  const colors = [
-    '#FF6B6B',
-    '#4ECDC4',
-    '#45B7D1',
-    '#96CEB4',
-    '#FFEAA7',
-    '#DDA0DD',
-    '#98D8C8',
-    '#F7DC6F',
-    '#BB8FCE',
-    '#85C1E9',
-  ];
-
   useEffect(() => {
-    drawRoulette();
-  }, [names, rotation]);
+    fetchPessoas();
 
-  const drawRoulette = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  const fetchPessoas = async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/pessoas');
+      if (response.ok) {
+        const data: Pessoa[] = await response.json();
+        setPessoas(data);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar pessoas:', error);
+    } finally {
+      setLoading(false);
     }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
-    }
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 10;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (names.length === 0) {
-      return;
-    }
-
-    const anglePerSlice = (2 * Math.PI) / names.length;
-
-    // Desenhar as fatias
-    names.forEach((name, index) => {
-      const startAngle = index * anglePerSlice + (rotation * Math.PI) / 180;
-      const endAngle = (index + 1) * anglePerSlice + (rotation * Math.PI) / 180;
-
-      // Fatia
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-      ctx.closePath();
-      ctx.fillStyle = colors[index % colors.length];
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Texto
-      const textAngle = startAngle + anglePerSlice / 2;
-      const textRadius = radius * 0.7;
-      const textX = centerX + Math.cos(textAngle) * textRadius;
-      const textY = centerY + Math.sin(textAngle) * textRadius;
-
-      ctx.save();
-      ctx.translate(textX, textY);
-      ctx.rotate(textAngle + Math.PI / 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(name, 0, 0);
-      ctx.restore();
-    });
-
-    // Ponteiro
-    ctx.beginPath();
-    ctx.moveTo(centerX + radius - 10, centerY);
-    ctx.lineTo(centerX + radius + 20, centerY - 15);
-    ctx.lineTo(centerX + radius + 20, centerY + 15);
-    ctx.closePath();
-    ctx.fillStyle = '#333333';
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
   };
 
-  const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    const { value } = e.target;
-    setTextareaValue(value);
+  const updatePoints = async (
+    id: number,
+    acao: 'aumentar' | 'diminuir' | 'sorteio',
+  ): Promise<void> => {
+    try {
+      const response = await fetch(`/api/pessoas/${id}/pontos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao }),
+      });
 
-    const newNames = value
-      .split('\n')
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0);
-
-    setNames(newNames);
+      if (response.ok) {
+        await fetchPessoas();
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar pontos:', error);
+    }
   };
 
-  const spinRoulette = () => {
-    if (isSpinning || names.length === 0) {
+  const clearAllPoints = async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/pessoas/clear-points', {
+        method: 'PUT',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        await fetchPessoas();
+        alert(result.message);
+      } else {
+        const error = await response.json();
+        alert(`Erro: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Erro ao limpar pontos:', error);
+      alert('Erro ao limpar pontos. Tente novamente.');
+    }
+  };
+
+  const deletePerson = async (pessoa: Pessoa): Promise<void> => {
+    const confirmed = confirm(
+      `Tem certeza que deseja excluir ${pessoa.nome}?\n\nEsta ação não pode ser desfeita.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/pessoas/${pessoa.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchPessoas();
+        alert(`${pessoa.nome} foi excluído(a) com sucesso!`);
+      } else {
+        const error = await response.json();
+        alert(`Erro ao excluir pessoa: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Erro ao excluir pessoa:', error);
+      alert('Erro ao excluir pessoa. Tente novamente.');
+    }
+  };
+
+  const addPerson = async (nome: string): Promise<void> => {
+    try {
+      const response = await fetch('/api/pessoas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome }),
+      });
+
+      if (response.ok) {
+        await fetchPessoas();
+      } else {
+        const error = await response.json();
+        alert(error.error);
+      }
+    } catch (error) {
+      console.error('Erro ao adicionar pessoa:', error);
+    }
+  };
+
+  const spinRoulette = (): void => {
+    if (isSpinning || pessoas.length === 0) {
       return;
     }
 
     setIsSpinning(true);
-    setWinner('');
+    setWinner(null);
 
-    // Rotação aleatória entre 1080 e 2160 graus (3-6 voltas completas)
     const finalRotation = rotation + 1080 + Math.random() * 1080;
-    const duration = 3000; // 3 segundos
+    const duration = 3000;
     const startTime = Date.now();
     const startRotation = rotation;
 
-    const animate = () => {
+    const animate = (): void => {
       const currentTime = Date.now();
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
-      // Easing function para desaceleração
       const easeOut = 1 - Math.pow(1 - progress, 3);
       const currentRotation =
         startRotation + (finalRotation - startRotation) * easeOut;
@@ -149,94 +152,76 @@ export default function Home() {
       } else {
         setIsSpinning(false);
 
-        // Calcular o vencedor
+        // Calcular vencedor
         const normalizedRotation = (360 - (currentRotation % 360)) % 360;
-        const anglePerSlice = 360 / names.length;
+        const anglePerSlice = 360 / pessoas.length;
         const winnerIndex = Math.floor(normalizedRotation / anglePerSlice);
-        setWinner(names[winnerIndex]);
+        const winnerPerson = pessoas[winnerIndex];
+
+        setWinner(winnerPerson);
+
+        // Adicionar ponto ao vencedor
+        updatePoints(winnerPerson.id, 'sorteio');
       }
     };
 
     animationRef.current = requestAnimationFrame(animate);
   };
 
-  useEffect(() => {
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, []);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 flex items-center justify-center">
+        <div className="text-white text-xl">Carregando...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 p-6">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold text-white text-center mb-8 drop-shadow-lg">
-          🎰 Roleta de Nomes
+          🎰 Roleta de Pontuação
         </h1>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid lg:grid-cols-2 gap-8">
           {/* Roleta */}
           <div className="flex flex-col items-center">
-            <div className="bg-white rounded-full p-4 shadow-2xl">
-              <canvas
-                ref={canvasRef}
-                width={400}
-                height={400}
-                className="rounded-full"
-              />
-            </div>
+            <Roulette pessoas={pessoas} rotation={rotation} />
 
             {winner && (
               <div className="mt-6 p-4 bg-yellow-400 rounded-lg shadow-lg animate-bounce">
                 <h2 className="text-2xl font-bold text-gray-800 text-center">
-                  🎉 Vencedor: {winner} 🎉
+                  🎉 Vencedor: {winner.nome} 🎉
                 </h2>
+                <p className="text-center text-gray-700">
+                  +1 ponto! Total: {winner.pontos + 1} pontos
+                </p>
               </div>
             )}
-          </div>
-
-          {/* Controles */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg p-6 shadow-xl">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">
-                📝 Lista de Nomes
-              </h3>
-              <textarea
-                value={textareaValue}
-                onChange={handleTextareaChange}
-                placeholder="Digite um nome por linha..."
-                className="w-full h-64 p-4 border-2 border-gray-300 rounded-lg resize-none focus:border-purple-500 focus:outline-none font-mono"
-              />
-              <p className="text-sm text-gray-600 mt-2">
-                Total de nomes: {names.length}
-              </p>
-            </div>
 
             <button
               onClick={spinRoulette}
-              disabled={isSpinning || names.length === 0}
-              className={`w-full py-4 px-8 rounded-lg font-bold text-xl transition-all duration-200 ${
-                isSpinning || names.length === 0
+              disabled={isSpinning || pessoas.length === 0}
+              className={`mt-6 w-full max-w-md py-4 px-8 rounded-lg font-bold text-xl transition-all duration-200 ${
+                isSpinning || pessoas.length === 0
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}
             >
               {isSpinning ? '🎲 Girando...' : '🚀 Girar Roleta'}
             </button>
-
-            {names.length === 0 && (
-              <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg">
-                ⚠️ Adicione pelo menos um nome para usar a roleta!
-              </div>
-            )}
           </div>
-        </div>
 
-        <div className="mt-8 text-center text-white">
-          <p className="text-sm opacity-75">
-            💡 Dica: Digite um nome por linha na caixa de texto
-          </p>
+          {/* Lista de Pessoas */}
+          <div>
+            <PersonList
+              pessoas={pessoas}
+              onUpdatePoints={updatePoints}
+              onDeletePerson={deletePerson}
+              onAddPerson={addPerson}
+              onClearAllPoints={clearAllPoints}
+            />
+          </div>
         </div>
       </div>
     </div>
