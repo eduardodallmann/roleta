@@ -2,11 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { pool } from '~/db/pool';
 
-interface RouteParams {
+type RouteParams = {
   params: Promise<{
     id: string;
   }>;
-}
+};
 
 export async function DELETE(
   request: NextRequest,

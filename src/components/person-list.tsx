@@ -2,18 +2,21 @@
 
 import { Minus, Plus, RotateCcw, Trash2 } from 'lucide-react';
 
+import type { Configs } from '~/types/configs';
 import type { Pessoa } from '~/types/pessoa';
 
-interface PersonListProps {
+type PersonListProps = {
   pessoas: Pessoa[];
+  configs: Configs;
   onUpdatePoints: (id: number, acao: 'aumentar' | 'diminuir') => Promise<void>;
   onDeletePerson: (pessoa: Pessoa) => void;
   onAddPerson: (nome: string) => Promise<void>;
   onClearAllPoints: () => void;
-}
+};
 
 export const PersonList: React.FC<PersonListProps> = ({
   pessoas,
+  configs,
   onUpdatePoints,
   onDeletePerson,
   onAddPerson,
@@ -84,21 +87,25 @@ export const PersonList: React.FC<PersonListProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => onUpdatePoints(pessoa.id, 'aumentar')}
-                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
-                title="Aumentar pontos"
-              >
-                <Plus size={16} />
-              </button>
+              {configs.showUpDown && (
+                <button
+                  onClick={() => onUpdatePoints(pessoa.id, 'aumentar')}
+                  className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                  title="Aumentar pontos"
+                >
+                  <Plus size={16} />
+                </button>
+              )}
 
-              <button
-                onClick={() => onUpdatePoints(pessoa.id, 'diminuir')}
-                className="p-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
-                title="Diminuir pontos"
-              >
-                <Minus size={16} />
-              </button>
+              {configs.showUpDown && (
+                <button
+                  onClick={() => onUpdatePoints(pessoa.id, 'diminuir')}
+                  className="p-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
+                  title="Diminuir pontos"
+                >
+                  <Minus size={16} />
+                </button>
+              )}
 
               <button
                 onClick={() => onDeletePerson(pessoa)}

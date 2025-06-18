@@ -1,20 +1,20 @@
-export interface Pessoa {
+export type Pessoa = {
   id: number;
   nome: string;
   pontos: number;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface CreatePessoaRequest {
+export type CreatePessoaRequest = {
   nome: string;
-}
+};
 
-export interface UpdatePontosRequest {
+export type UpdatePontosRequest = {
   acao: 'aumentar' | 'diminuir' | 'sorteio';
-}
+};
 
-export interface ApiResponse<T> {
+export type ApiResponse<T> = {
   data?: T;
   error?: string;
-}
+};

@@ -3,11 +3,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { pool } from '~/db/pool';
 import type { Pessoa, UpdatePontosRequest } from '~/types/pessoa';
 
-interface RouteParams {
+type RouteParams = {
   params: Promise<{
     id: string;
   }>;
-}
+};
 
 export async function PUT(
   request: NextRequest,

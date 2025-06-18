@@ -4,10 +4,10 @@ import { useEffect, useRef } from 'react';
 
 import type { Pessoa } from '~/types/pessoa';
 
-interface RouletteProps {
+type RouletteProps = {
   pessoas: Pessoa[];
   rotation: number;
-}
+};
 
 export const Roulette: React.FC<RouletteProps> = ({ pessoas, rotation }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);

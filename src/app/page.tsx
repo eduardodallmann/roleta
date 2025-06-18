@@ -4,10 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 
 import { PersonList } from '~/components/person-list';
 import { Roulette } from '~/components/roulette';
+import type { Configs } from '~/types/configs';
 import type { Pessoa } from '~/types/pessoa';
 
 export default function Home() {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [configs, setConfigs] = useState<Configs>({
+    showUpDown: false,
+  });
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [rotation, setRotation] = useState<number>(0);
   const [winner, setWinner] = useState<Pessoa | null>(null);
@@ -16,6 +20,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchPessoas();
+    fetchConfigs();
 
     return () => {
       if (animationRef.current) {
@@ -23,6 +28,20 @@ export default function Home() {
       }
     };
   }, []);
+
+  const fetchConfigs = async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/configs');
+      if (response.ok) {
+        const data: Configs = await response.json();
+        setConfigs(data);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar pessoas:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchPessoas = async (): Promise<void> => {
     try {
@@ -216,6 +235,7 @@ export default function Home() {
           <div>
             <PersonList
               pessoas={pessoas}
+              configs={configs}
               onUpdatePoints={updatePoints}
               onDeletePerson={deletePerson}
               onAddPerson={addPerson}
