@@ -205,7 +205,12 @@ export default function Home() {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Roleta */}
           <div className="flex flex-col items-center">
-            <Roulette pessoas={pessoas} rotation={rotation} />
+            <Roulette
+              pessoas={[...pessoas].sort((a, b) =>
+                a.nome.localeCompare(b.nome),
+              )}
+              rotation={rotation}
+            />
 
             {winner && (
               <div className="mt-6 p-4 bg-yellow-400 rounded-lg shadow-lg animate-bounce">
