@@ -74,49 +74,51 @@ export const PersonList: React.FC<PersonListProps> = ({
       </div>
 
       <div className="space-y-3 max-h-96 overflow-y-auto">
-        {pessoas.map((pessoa) => (
-          <div
-            key={pessoa.id}
-            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-          >
-            <div className="flex-1">
-              <span className="font-medium text-gray-800">{pessoa.nome}</span>
-              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                {pessoa.pontos} pts
-              </span>
-            </div>
+        {[...pessoas]
+          .sort((a, b) => b.pontos - a.pontos)
+          .map((pessoa) => (
+            <div
+              key={pessoa.id}
+              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+            >
+              <div className="flex-1">
+                <span className="font-medium text-gray-800">{pessoa.nome}</span>
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                  {pessoa.pontos} pts
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2">
-              {configs.showUpDown && (
+              <div className="flex items-center gap-2">
+                {configs.showUpDown && (
+                  <button
+                    onClick={() => onUpdatePoints(pessoa.id, 'aumentar')}
+                    className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                    title="Aumentar pontos"
+                  >
+                    <Plus size={16} />
+                  </button>
+                )}
+
+                {configs.showUpDown && (
+                  <button
+                    onClick={() => onUpdatePoints(pessoa.id, 'diminuir')}
+                    className="p-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
+                    title="Diminuir pontos"
+                  >
+                    <Minus size={16} />
+                  </button>
+                )}
+
                 <button
-                  onClick={() => onUpdatePoints(pessoa.id, 'aumentar')}
-                  className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
-                  title="Aumentar pontos"
+                  onClick={() => onDeletePerson(pessoa)}
+                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
+                  title="Excluir pessoa"
                 >
-                  <Plus size={16} />
+                  <Trash2 size={16} />
                 </button>
-              )}
-
-              {configs.showUpDown && (
-                <button
-                  onClick={() => onUpdatePoints(pessoa.id, 'diminuir')}
-                  className="p-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
-                  title="Diminuir pontos"
-                >
-                  <Minus size={16} />
-                </button>
-              )}
-
-              <button
-                onClick={() => onDeletePerson(pessoa)}
-                className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
-                title="Excluir pessoa"
-              >
-                <Trash2 size={16} />
-              </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
         {pessoas.length === 0 && (
           <div className="text-center py-8 text-gray-500">

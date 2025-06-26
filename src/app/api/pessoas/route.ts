@@ -8,7 +8,7 @@ export async function GET(): Promise<
 > {
   try {
     const result = await pool.query<Pessoa>(
-      'SELECT * FROM pessoas ORDER BY pontos DESC, nome ASC',
+      'SELECT * FROM pessoas ORDER BY nome ASC',
     );
 
     return NextResponse.json(result.rows);
