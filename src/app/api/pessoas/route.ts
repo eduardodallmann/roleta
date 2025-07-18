@@ -38,7 +38,7 @@ export async function POST(
 
     const result = await pool.query<Pessoa>(
       'INSERT INTO pessoas (nome, pontos) VALUES ($1, 0) RETURNING *',
-      [nome.trim()],
+      [nome.trim().toUpperCase()],
     );
 
     return NextResponse.json(result.rows[0], { status: 201 });
