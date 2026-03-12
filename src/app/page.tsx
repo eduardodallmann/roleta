@@ -1,246 +1,132 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-import { PersonList } from '~/components/person-list';
-import { Roulette } from '~/components/roulette';
-import type { Configs } from '~/types/configs';
-import type { Pessoa } from '~/types/pessoa';
+import { ArrowRight, Trophy, Users } from 'lucide-react';
+
+import type { Time } from '~/types/time';
 
 export default function Home() {
-  const [pessoas, setPessoas] = useState<Pessoa[]>([]);
-  const [configs, setConfigs] = useState<Configs>({
-    showUpDown: false,
-  });
-  const [isSpinning, setIsSpinning] = useState<boolean>(false);
-  const [rotation, setRotation] = useState<number>(0);
-  const [winner, setWinner] = useState<Pessoa | null>(null);
+  const router = useRouter();
+  const [times, setTimes] = useState<Time[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const animationRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    fetchPessoas();
-    fetchConfigs();
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, []);
-
-  const fetchConfigs = async (): Promise<void> => {
+  const fetchTimes = async (): Promise<void> => {
     try {
-      const response = await fetch('/api/configs');
+      const response = await fetch('/api/times');
       if (response.ok) {
-        const data: Configs = await response.json();
-        setConfigs(data);
+        const data: Time[] = await response.json();
+        setTimes(data);
       }
     } catch (error) {
-      console.error('Erro ao buscar pessoas:', error);
+      console.error('Erro ao buscar times:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPessoas = async (): Promise<void> => {
-    try {
-      const response = await fetch('/api/pessoas');
-      if (response.ok) {
-        const data: Pessoa[] = await response.json();
-        setPessoas(data);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar pessoas:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const addTime = async (): Promise<void> => {
+    const nome = prompt('Digite o nome do novo time:');
 
-  const updatePoints = async (
-    id: number,
-    acao: 'aumentar' | 'diminuir' | 'sorteio',
-  ): Promise<void> => {
-    try {
-      const response = await fetch(`/api/pessoas/${id}/pontos`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao }),
-      });
-
-      if (response.ok) {
-        await fetchPessoas();
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar pontos:', error);
-    }
-  };
-
-  const clearAllPoints = async (): Promise<void> => {
-    try {
-      const response = await fetch('/api/pessoas/clear-points', {
-        method: 'PUT',
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        await fetchPessoas();
-        alert(result.message);
-      } else {
-        const error = await response.json();
-        alert(`Erro: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('Erro ao limpar pontos:', error);
-      alert('Erro ao limpar pontos. Tente novamente.');
-    }
-  };
-
-  const deletePerson = async (pessoa: Pessoa): Promise<void> => {
-    const confirmed = confirm(
-      `Tem certeza que deseja excluir ${pessoa.nome}?\n\nEsta ação não pode ser desfeita.`,
-    );
-
-    if (!confirmed) {
+    if (!nome || nome.trim() === '') {
       return;
     }
 
     try {
-      const response = await fetch(`/api/pessoas/${pessoa.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        await fetchPessoas();
-        alert(`${pessoa.nome} foi excluído(a) com sucesso!`);
-      } else {
-        const error = await response.json();
-        alert(`Erro ao excluir pessoa: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('Erro ao excluir pessoa:', error);
-      alert('Erro ao excluir pessoa. Tente novamente.');
-    }
-  };
-
-  const addPerson = async (nome: string): Promise<void> => {
-    try {
-      const response = await fetch('/api/pessoas', {
+      const response = await fetch('/api/times', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome }),
       });
 
       if (response.ok) {
-        await fetchPessoas();
-      } else {
-        const error = await response.json();
-        alert(error.error);
+        await fetchTimes();
+
+        return;
       }
+
+      const data = await response.json();
+      alert(data.error ?? 'Não foi possível criar o time.');
     } catch (error) {
-      console.error('Erro ao adicionar pessoa:', error);
+      console.error('Erro ao criar time:', error);
+      alert('Erro ao criar time. Tente novamente.');
     }
   };
 
-  const spinRoulette = (): void => {
-    if (isSpinning || pessoas.length === 0) {
-      return;
-    }
-
-    setIsSpinning(true);
-    setWinner(null);
-
-    const finalRotation = rotation + 1080 + Math.random() * 1080;
-    const duration = 3000;
-    const startTime = Date.now();
-    const startRotation = rotation;
-
-    const animate = (): void => {
-      const currentTime = Date.now();
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentRotation =
-        startRotation + (finalRotation - startRotation) * easeOut;
-
-      setRotation(currentRotation);
-
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        setIsSpinning(false);
-
-        // Calcular vencedor
-        const normalizedRotation = (360 - (currentRotation % 360)) % 360;
-        const anglePerSlice = 360 / pessoas.length;
-        const winnerIndex = Math.floor(normalizedRotation / anglePerSlice);
-        const winnerPerson = pessoas[winnerIndex];
-
-        setWinner(winnerPerson);
-
-        // Adicionar ponto ao vencedor
-        updatePoints(winnerPerson.id, 'sorteio');
-      }
-    };
-
-    animationRef.current = requestAnimationFrame(animate);
-  };
+  useEffect(() => {
+    fetchTimes();
+  }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-purple-400 via-pink-500 to-red-500 flex items-center justify-center">
         <div className="text-white text-xl">Carregando...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-linear-to-br from-purple-400 via-pink-500 to-red-500 p-6">
+      <div className="max-w-6xl mx-auto space-y-8">
         <h1 className="text-4xl font-bold text-white text-center mb-8 drop-shadow-lg">
           🎰 Roleta de Pontuação
         </h1>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Roleta */}
-          <div className="flex flex-col items-center">
-            <Roulette pessoas={pessoas} rotation={rotation} />
-
-            {winner && (
-              <div className="mt-6 p-4 bg-yellow-400 rounded-lg shadow-lg animate-bounce">
-                <h2 className="text-2xl font-bold text-gray-800 text-center">
-                  🎉 Vencedor: {winner.nome} 🎉
-                </h2>
-                <p className="text-center text-gray-700">
-                  +1 ponto! Total: {winner.pontos + 1} pontos
-                </p>
-              </div>
-            )}
-
+        <div className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl p-6 shadow-2xl">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white drop-shadow">
+                Times
+              </h2>
+              <p className="text-white/90">
+                Escolha um time para abrir a roleta ou crie um novo.
+              </p>
+            </div>
             <button
-              onClick={spinRoulette}
-              disabled={isSpinning || pessoas.length === 0}
-              className={`mt-6 w-full max-w-md py-4 px-8 rounded-lg font-bold text-xl transition-all duration-200 ${
-                isSpinning || pessoas.length === 0
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
-              }`}
+              onClick={addTime}
+              className="cursor-pointer bg-green-500 hover:bg-green-600 text-white px-5 py-3 rounded-lg font-semibold shadow-lg transition-colors"
             >
-              {isSpinning ? '🎲 Girando...' : '🚀 Girar Roleta'}
+              + Novo time
             </button>
           </div>
 
-          {/* Lista de Pessoas */}
-          <div>
-            <PersonList
-              pessoas={pessoas}
-              configs={configs}
-              onUpdatePoints={updatePoints}
-              onDeletePerson={deletePerson}
-              onAddPerson={addPerson}
-              onClearAllPoints={clearAllPoints}
-            />
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {times.map((time) => (
+              <button
+                key={time.id}
+                onClick={() => router.push(`/times/${time.id}`)}
+                className="cursor-pointer text-left rounded-xl bg-white p-5 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-10 h-10 rounded-lg bg-linear-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center">
+                    <Users size={18} />
+                  </div>
+                  <ArrowRight className="text-gray-500" size={18} />
+                </div>
+
+                <h3 className="text-lg font-bold text-gray-800 mb-4">
+                  {time.nome}
+                </h3>
+
+                <div className="flex items-center gap-3 text-sm text-gray-700">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                    <Users size={14} />
+                    {time.totalPessoas ?? 0} pessoas
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full">
+                    <Trophy size={14} />
+                    {time.totalPontos ?? 0} pts
+                  </span>
+                </div>
+              </button>
+            ))}
+
+            {times.length === 0 && (
+              <div className="sm:col-span-2 xl:col-span-3 text-center bg-white rounded-xl p-10 text-gray-600">
+                Nenhum time cadastrado. Clique em "Novo time" para começar.
+              </div>
+            )}
           </div>
         </div>
       </div>

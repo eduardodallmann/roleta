@@ -3,12 +3,23 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { pool } from '~/db/pool';
 import type { CreatePessoaRequest, Pessoa } from '~/types/pessoa';
 
-export async function GET(): Promise<
-  NextResponse<Pessoa[] | { error: string }>
-> {
+export async function GET(
+  request: NextRequest,
+): Promise<NextResponse<Pessoa[] | { error: string }>> {
   try {
+    const { searchParams } = new URL(request.url);
+    const timeId = Number(searchParams.get('timeId'));
+
+    if (!Number.isInteger(timeId) || timeId <= 0) {
+      return NextResponse.json(
+        { error: 'timeId é obrigatório e deve ser válido' },
+        { status: 400 },
+      );
+    }
+
     const result = await pool.query<Pessoa>(
-      'SELECT * FROM pessoas ORDER BY nome ASC',
+      'SELECT * FROM pessoas WHERE time_id = $1 ORDER BY nome ASC',
+      [timeId],
     );
 
     return NextResponse.json(result.rows);
@@ -27,7 +38,7 @@ export async function POST(
 ): Promise<NextResponse<Pessoa | { error: string }>> {
   try {
     const body: CreatePessoaRequest = await request.json();
-    const { nome } = body;
+    const { nome, timeId } = body;
 
     if (!nome || nome.trim() === '') {
       return NextResponse.json(
@@ -36,9 +47,16 @@ export async function POST(
       );
     }
 
+    if (!Number.isInteger(timeId) || timeId <= 0) {
+      return NextResponse.json(
+        { error: 'timeId é obrigatório e deve ser válido' },
+        { status: 400 },
+      );
+    }
+
     const result = await pool.query<Pessoa>(
-      'INSERT INTO pessoas (nome, pontos) VALUES ($1, 0) RETURNING *',
-      [nome.trim().toUpperCase()],
+      'INSERT INTO pessoas (nome, pontos, time_id) VALUES ($1, 0, $2) RETURNING *',
+      [nome.trim().toUpperCase(), timeId],
     );
 
     return NextResponse.json(result.rows[0], { status: 201 });
