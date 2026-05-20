@@ -56,7 +56,7 @@ export const PersonList: React.FC<PersonListProps> = ({
         <div className="flex gap-2">
           <button
             onClick={handleClearPoints}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors"
+            className="cursor-pointer bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors"
             title="Zerar todos os pontos"
           >
             <RotateCcw size={16} />
@@ -64,7 +64,7 @@ export const PersonList: React.FC<PersonListProps> = ({
           </button>
           <button
             onClick={handleAddPerson}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors"
+            className="cursor-pointer bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors"
             title="Adicionar nova pessoa"
           >
             <Plus size={16} />
@@ -92,7 +92,7 @@ export const PersonList: React.FC<PersonListProps> = ({
                 {configs.showUpDown && (
                   <button
                     onClick={() => onUpdatePoints(pessoa.id, 'aumentar')}
-                    className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                    className="cursor-pointer p-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
                     title="Aumentar pontos"
                   >
                     <Plus size={16} />
@@ -102,7 +102,7 @@ export const PersonList: React.FC<PersonListProps> = ({
                 {configs.showUpDown && (
                   <button
                     onClick={() => onUpdatePoints(pessoa.id, 'diminuir')}
-                    className="p-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
+                    className="cursor-pointer p-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors"
                     title="Diminuir pontos"
                   >
                     <Minus size={16} />
@@ -111,7 +111,7 @@ export const PersonList: React.FC<PersonListProps> = ({
 
                 <button
                   onClick={() => onDeletePerson(pessoa)}
-                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
+                  className="cursor-pointer p-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
                   title="Excluir pessoa"
                 >
                   <Trash2 size={16} />

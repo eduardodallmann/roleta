@@ -220,7 +220,7 @@ export default function TeamRoulettePage() {
           </h2>
           <button
             onClick={() => router.push('/')}
-            className="mt-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
+            className="cursor-pointer mt-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
           >
             Voltar para os times
           </button>
@@ -243,7 +243,7 @@ export default function TeamRoulettePage() {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
           <button
             onClick={() => router.push('/')}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-gray-800 hover:bg-gray-100 transition-colors"
+            className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-gray-800 hover:bg-gray-100 transition-colors"
           >
             <ArrowLeft size={18} />
             Voltar aos times
@@ -275,7 +275,7 @@ export default function TeamRoulettePage() {
               className={`mt-6 w-full max-w-md py-4 px-8 rounded-lg font-bold text-xl transition-all duration-200 ${
                 isSpinning || pessoas.length === 0
                   ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-linear-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+                  : 'cursor-pointer bg-linear-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}
             >
               {isSpinning ? '🎲 Girando...' : '🚀 Girar Roleta'}

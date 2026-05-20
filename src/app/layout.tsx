@@ -1,11 +1,12 @@
+import type { PropsWithChildren } from 'react';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 
-import { Analytics } from '@vercel/analytics/next';
-
 import './globals.css';
 
-import type { PropsWithChildren } from 'react';
+import { Analytics } from '@vercel/analytics/next';
+
+import CoffeeTipQr from '~/components/coffee-tip-qr';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -22,13 +23,14 @@ export const metadata: Metadata = {
   description: 'Uma roleta melhor',
 };
 
-export default function RootLayout({ children }: PropsWithChildren) {
+export default function RootLayout({ children }: Readonly<PropsWithChildren>) {
   return (
     <html lang="pt-BR">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <CoffeeTipQr />
         <Analytics />
       </body>
     </html>
