@@ -14,7 +14,7 @@ export default async function CoffeeTipQr() {
   });
 
   return (
-    <aside className="fixed bottom-4 right-4 z-50 w-56 rounded-xl border border-black/10 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
+    <aside className="fixed bottom-4 left-4 z-50 w-56 rounded-xl border border-black/10 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
       <p className="text-sm font-semibold text-zinc-900">
         Me pague um cafezin ☕
       </p>
