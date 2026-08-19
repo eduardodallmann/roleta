@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { PersonList } from '~/components/person-list';
 import { Roulette } from '~/components/roulette';
+import { Roulette3D, type SpinRequest } from '~/components/roulette-3d';
 import type { Configs } from '~/types/configs';
 import type { Pessoa } from '~/types/pessoa';
 import type { Time } from '~/types/time';
@@ -22,10 +23,22 @@ export default function TeamRoulettePage() {
     showUpDown: false,
   });
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
-  const [rotation, setRotation] = useState<number>(0);
+  const [spinRequest, setSpinRequest] = useState<SpinRequest | null>(null);
   const [winner, setWinner] = useState<Pessoa | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const spinIdRef = useRef(0);
+  const currentWinnerIndexRef = useRef(0);
   const animationRef = useRef<number | null>(null);
+  const [mode, setMode] = useState<'3d' | '2d'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('roulette-mode');
+
+      return saved === '2d' ? '2d' : '3d';
+    }
+
+    return '3d';
+  });
+  const [rotation2D, setRotation2D] = useState(0);
 
   const fetchConfigs = async (): Promise<void> => {
     const response = await fetch('/api/configs');
@@ -80,6 +93,10 @@ export default function TeamRoulettePage() {
       }
     };
   }, [teamId]);
+
+  useEffect(() => {
+    localStorage.setItem('roulette-mode', mode);
+  }, [mode]);
 
   const updatePoints = async (
     id: number,
@@ -177,38 +194,58 @@ export default function TeamRoulettePage() {
     setIsSpinning(true);
     setWinner(null);
 
-    const finalRotation = rotation + 1080 + Math.random() * 1080;
-    const duration = 3000;
-    const startTime = Date.now();
-    const startRotation = rotation;
+    if (mode === '2d') {
+      const finalRotation = rotation2D + 1080 + Math.random() * 1080;
+      const duration = 3000;
+      const startTime = Date.now();
+      const startRotation = rotation2D;
 
-    const animate = (): void => {
-      const currentTime = Date.now();
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+      const animate = (): void => {
+        const currentTime = Date.now();
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
 
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentRotation =
-        startRotation + (finalRotation - startRotation) * easeOut;
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentRotation =
+          startRotation + (finalRotation - startRotation) * easeOut;
 
-      setRotation(currentRotation);
+        setRotation2D(currentRotation);
 
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        setIsSpinning(false);
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        } else {
+          setIsSpinning(false);
 
-        const normalizedRotation = (360 - (currentRotation % 360)) % 360;
-        const anglePerSlice = 360 / pessoas.length;
-        const winnerIndex = Math.floor(normalizedRotation / anglePerSlice);
-        const winnerPerson = pessoas[winnerIndex];
+          const normalizedRotation = (360 - (currentRotation % 360)) % 360;
+          const anglePerSlice = 360 / pessoas.length;
+          const winnerIndex = Math.floor(normalizedRotation / anglePerSlice);
+          const winnerPerson = pessoas[winnerIndex];
 
-        setWinner(winnerPerson);
-        updatePoints(winnerPerson.id, 'sorteio');
-      }
-    };
+          setWinner(winnerPerson);
+          updatePoints(winnerPerson.id, 'sorteio');
+        }
+      };
 
-    animationRef.current = requestAnimationFrame(animate);
+      animationRef.current = requestAnimationFrame(animate);
+    } else {
+      const targetIndex = Math.floor(Math.random() * pessoas.length);
+      currentWinnerIndexRef.current = targetIndex;
+      spinIdRef.current += 1;
+
+      setSpinRequest({ id: spinIdRef.current, targetIndex });
+    }
+  };
+
+  const handleSpinEnd = (): void => {
+    setIsSpinning(false);
+
+    const winnerPerson = pessoas[currentWinnerIndexRef.current];
+    if (!winnerPerson) {
+      return;
+    }
+
+    setWinner(winnerPerson);
+    updatePoints(winnerPerson.id, 'sorteio');
   };
 
   if (!Number.isInteger(teamId) || teamId <= 0) {
@@ -256,7 +293,15 @@ export default function TeamRoulettePage() {
 
         <div className="grid lg:grid-cols-2 gap-8">
           <div className="flex flex-col items-center">
-            <Roulette pessoas={pessoas} rotation={rotation} />
+            {mode === '3d' ? (
+              <Roulette3D
+                pessoas={pessoas}
+                spinRequest={spinRequest}
+                onSpinEnd={handleSpinEnd}
+              />
+            ) : (
+              <Roulette pessoas={pessoas} rotation={rotation2D} />
+            )}
 
             {winner && (
               <div className="mt-6 p-4 bg-yellow-400 rounded-lg shadow-lg animate-bounce">
@@ -291,6 +336,31 @@ export default function TeamRoulettePage() {
               onAddPerson={addPerson}
               onClearAllPoints={clearAllPoints}
             />
+
+            <div className="mt-4 flex items-center justify-center">
+              <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1 shadow-sm">
+                <button
+                  onClick={() => setMode('3d')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    mode === '3d'
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  3D
+                </button>
+                <button
+                  onClick={() => setMode('2d')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    mode === '2d'
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  2D
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
