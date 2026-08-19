@@ -12,6 +12,11 @@ import type { Configs } from '~/types/configs';
 import type { Pessoa } from '~/types/pessoa';
 import type { Time } from '~/types/time';
 
+type SoundSelect = 'silvio' | 'tick-tick' | 'sem-som';
+
+const SELECTED_BTN = 'bg-gray-900 text-white';
+const UNSELECTED_BTN = 'text-gray-600 hover:text-gray-900';
+
 export default function TeamRoulettePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -39,6 +44,17 @@ export default function TeamRoulettePage() {
     return '3d';
   });
   const [rotation2D, setRotation2D] = useState(0);
+  const [soundSelect, setSoundSelect] = useState<SoundSelect>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('roulette-sound');
+      if (saved === 'silvio' || saved === 'tick-tick' || saved === 'sem-som') {
+        return saved;
+      }
+    }
+
+    return 'silvio';
+  });
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const fetchConfigs = async (): Promise<void> => {
     const response = await fetch('/api/configs');
@@ -97,6 +113,9 @@ export default function TeamRoulettePage() {
   useEffect(() => {
     localStorage.setItem('roulette-mode', mode);
   }, [mode]);
+  useEffect(() => {
+    localStorage.setItem('roulette-sound', soundSelect);
+  }, [soundSelect]);
 
   const updatePoints = async (
     id: number,
@@ -186,17 +205,34 @@ export default function TeamRoulettePage() {
     }
   };
 
+  const playSpinSound = (): void => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    if (mode !== '3d' || soundSelect === 'sem-som') {
+      return;
+    }
+
+    const audio = new Audio(`/sounds/${soundSelect}.mp3`);
+    audioRef.current = audio;
+    void audio.play().catch(() => {});
+  };
+
   const spinRoulette = (): void => {
     if (isSpinning || pessoas.length === 0) {
       return;
     }
+
+    playSpinSound();
 
     setIsSpinning(true);
     setWinner(null);
 
     if (mode === '2d') {
       const finalRotation = rotation2D + 1080 + Math.random() * 1080;
-      const duration = 3000;
+      const duration = 10000;
       const startTime = Date.now();
       const startRotation = rotation2D;
 
@@ -337,14 +373,12 @@ export default function TeamRoulettePage() {
               onClearAllPoints={clearAllPoints}
             />
 
-            <div className="mt-4 flex items-center justify-center">
+            <div className="mt-4 flex items-center justify-between gap-4">
               <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1 shadow-sm">
                 <button
                   onClick={() => setMode('3d')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mode === '3d'
-                      ? 'bg-gray-900 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
+                    mode === '3d' ? SELECTED_BTN : UNSELECTED_BTN
                   }`}
                 >
                   3D
@@ -352,14 +386,43 @@ export default function TeamRoulettePage() {
                 <button
                   onClick={() => setMode('2d')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mode === '2d'
-                      ? 'bg-gray-900 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
+                    mode === '2d' ? SELECTED_BTN : UNSELECTED_BTN
                   }`}
                 >
                   2D
                 </button>
               </div>
+
+              {mode === '3d' && (
+                <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1 shadow-sm">
+                  <button
+                    onClick={() => setSoundSelect('silvio')}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      soundSelect === 'silvio' ? SELECTED_BTN : UNSELECTED_BTN
+                    }`}
+                  >
+                    Silvio
+                  </button>
+                  <button
+                    onClick={() => setSoundSelect('tick-tick')}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      soundSelect === 'tick-tick'
+                        ? SELECTED_BTN
+                        : UNSELECTED_BTN
+                    }`}
+                  >
+                    Tick-Tick
+                  </button>
+                  <button
+                    onClick={() => setSoundSelect('sem-som')}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      soundSelect === 'sem-som' ? SELECTED_BTN : UNSELECTED_BTN
+                    }`}
+                  >
+                    Sem som
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

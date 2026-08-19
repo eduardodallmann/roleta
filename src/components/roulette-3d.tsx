@@ -23,7 +23,7 @@ type Roulette3DProps = {
 const PETAL_COUNT = 36;
 const MIN_SPIN_TURNS = 4;
 const RANDOM_EXTRA_TURNS = 3;
-const SPIN_DURATION_MS = 4300;
+const SPIN_DURATION_MS = 10000;
 const SPIN_EASING = 'cubic-bezier(0.12, 0.76, 0.16, 1)';
 const GOLD_RING =
   'conic-gradient(from 210deg, #8a5a00, #f5c542 12%, #fff3b0 22%, #d9a115 38%, #8a5a00 52%, #f7d060 66%, #b8860b 80%, #8a5a00)';
