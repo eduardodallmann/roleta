@@ -16,6 +16,14 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+Copie `.env.example` para `.env.local` e configure as variáveis antes de usar a
+chamada de voz do modo Silvio. `OPENROUTER_API_KEY`, `OPENROUTER_TEXT_MODEL`,
+`FISH_API_KEY`, `FISH_TTS_MODEL` e `FISH_VOICE_ID` são lidas somente pelo
+backend e não devem usar o prefixo `NEXT_PUBLIC_`. O áudio é gerado diretamente
+pela API do Fish Audio, sem passar pelo OpenRouter.
+Quando `GROQ_API_KEY` e `GROQ_TEXT_MODEL` estiverem configuradas, o Groq será
+usado como fallback automático caso a geração textual pelo OpenRouter falhe.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

@@ -55,6 +55,11 @@ export default function TeamRoulettePage() {
     return 'silvio';
   });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const generatedAudioRef = useRef<{
+    spinId: number;
+    promise: Promise<Blob | null>;
+  } | null>(null);
 
   const fetchConfigs = async (): Promise<void> => {
     const response = await fetch('/api/configs');
@@ -106,6 +111,14 @@ export default function TeamRoulettePage() {
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+      }
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
       }
     };
   }, [teamId]);
@@ -211,6 +224,11 @@ export default function TeamRoulettePage() {
       audioRef.current.currentTime = 0;
     }
 
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+
     if (mode !== '3d' || soundSelect === 'sem-som') {
       return;
     }
@@ -220,17 +238,80 @@ export default function TeamRoulettePage() {
     void audio.play().catch(() => {});
   };
 
+  const requestWinnerAudio = async (nome: string): Promise<Blob | null> => {
+    try {
+      const response = await fetch('/api/silvio-winner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error || `Erro ${response.status}`);
+      }
+
+      return response.blob();
+    } catch (error) {
+      console.error('Erro ao preparar a chamada do vencedor:', error);
+
+      return null;
+    }
+  };
+
+  const playWinnerAudio = async (spinId: number): Promise<void> => {
+    const generatedAudio = generatedAudioRef.current;
+
+    if (!generatedAudio || generatedAudio.spinId !== spinId) {
+      return;
+    }
+
+    const audioBlob = await generatedAudio.promise;
+
+    if (!audioBlob) {
+      return;
+    }
+
+    if (generatedAudioRef.current?.spinId !== spinId) {
+      return;
+    }
+
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    audioUrlRef.current = audioUrl;
+    audioRef.current = audio;
+    audio.addEventListener(
+      'ended',
+      () => {
+        URL.revokeObjectURL(audioUrl);
+        if (audioUrlRef.current === audioUrl) {
+          audioUrlRef.current = null;
+        }
+      },
+      { once: true },
+    );
+    void audio.play().catch((error) => {
+      URL.revokeObjectURL(audioUrl);
+      if (audioUrlRef.current === audioUrl) {
+        audioUrlRef.current = null;
+      }
+      console.error('Erro ao tocar a chamada do vencedor:', error);
+    });
+  };
+
   const spinRoulette = (): void => {
     if (isSpinning || pessoas.length === 0) {
       return;
     }
 
-    playSpinSound();
-
     setIsSpinning(true);
     setWinner(null);
 
     if (mode === '2d') {
+      playSpinSound();
+
       const finalRotation = rotation2D + 1080 + Math.random() * 1080;
       const duration = 10000;
       const startTime = Date.now();
@@ -265,8 +346,20 @@ export default function TeamRoulettePage() {
       animationRef.current = requestAnimationFrame(animate);
     } else {
       const targetIndex = Math.floor(Math.random() * pessoas.length);
+      const winnerPerson = pessoas[targetIndex];
       currentWinnerIndexRef.current = targetIndex;
       spinIdRef.current += 1;
+
+      if (soundSelect === 'silvio') {
+        generatedAudioRef.current = {
+          spinId: spinIdRef.current,
+          promise: requestWinnerAudio(winnerPerson.nome),
+        };
+      } else {
+        generatedAudioRef.current = null;
+      }
+
+      playSpinSound();
 
       setSpinRequest({ id: spinIdRef.current, targetIndex });
     }
@@ -275,6 +368,11 @@ export default function TeamRoulettePage() {
   const handleSpinEnd = (): void => {
     setIsSpinning(false);
 
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
     const winnerPerson = pessoas[currentWinnerIndexRef.current];
     if (!winnerPerson) {
       return;
@@ -282,6 +380,7 @@ export default function TeamRoulettePage() {
 
     setWinner(winnerPerson);
     updatePoints(winnerPerson.id, 'sorteio');
+    void playWinnerAudio(spinIdRef.current);
   };
 
   if (!Number.isInteger(teamId) || teamId <= 0) {
