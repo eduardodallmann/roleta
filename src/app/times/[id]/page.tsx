@@ -243,7 +243,7 @@ export default function TeamRoulettePage() {
       const response = await fetch('/api/silvio-winner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome }),
+        body: JSON.stringify({ nome, timeId: teamId }),
       });
 
       if (!response.ok) {
