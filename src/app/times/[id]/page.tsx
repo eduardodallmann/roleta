@@ -5,17 +5,19 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { ArrowLeft } from 'lucide-react';
 
+import { CharacterSelect } from '~/components/character-select';
 import { PersonList } from '~/components/person-list';
 import { Roulette } from '~/components/roulette';
 import { Roulette3D, type SpinRequest } from '~/components/roulette-3d';
+import {
+  CHARACTER_PREFERENCE_KEY,
+  readCharacterPreference,
+  serializeCharacterPreference,
+} from '~/lib/character-preference';
+import type { CharacterOption } from '~/types/character';
 import type { Configs } from '~/types/configs';
 import type { Pessoa } from '~/types/pessoa';
 import type { Time } from '~/types/time';
-
-type SoundSelect = 'silvio' | 'tick-tick' | 'sem-som';
-
-const SELECTED_BTN = 'bg-gray-900 text-white';
-const UNSELECTED_BTN = 'text-gray-600 hover:text-gray-900';
 
 export default function TeamRoulettePage() {
   const params = useParams<{ id: string }>();
@@ -32,28 +34,19 @@ export default function TeamRoulettePage() {
   const [winner, setWinner] = useState<Pessoa | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const spinIdRef = useRef(0);
-  const currentWinnerIndexRef = useRef(0);
+  const currentWinnerRef = useRef<Pessoa | null>(null);
+  const spinInProgressRef = useRef(false);
   const animationRef = useRef<number | null>(null);
-  const [mode, setMode] = useState<'3d' | '2d'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('roulette-mode');
-
-      return saved === '2d' ? '2d' : '3d';
-    }
-
-    return '3d';
-  });
+  const voiceAbortRef = useRef<AbortController | null>(null);
+  const [characters, setCharacters] = useState<CharacterOption[]>([]);
+  const [characterSlug, setCharacterSlug] = useState<string | null>(null);
+  const [charactersLoading, setCharactersLoading] = useState(true);
+  const [characterError, setCharacterError] = useState(false);
+  const selectedCharacter = characters.find(
+    ({ slug }) => slug === characterSlug,
+  );
+  const mode = selectedCharacter?.mode ?? '2d';
   const [rotation2D, setRotation2D] = useState(0);
-  const [soundSelect, setSoundSelect] = useState<SoundSelect>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('roulette-sound');
-      if (saved === 'silvio' || saved === 'tick-tick' || saved === 'sem-som') {
-        return saved;
-      }
-    }
-
-    return 'silvio';
-  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const generatedAudioRef = useRef<{
@@ -105,30 +98,100 @@ export default function TeamRoulettePage() {
     }
   };
 
+  const stopAudio = (): void => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
+
+  const cancelWinnerAudio = (): void => {
+    voiceAbortRef.current?.abort();
+    generatedAudioRef.current = null;
+    stopAudio();
+  };
+
+  const fetchCharacters = async (signal?: AbortSignal): Promise<void> => {
+    setCharactersLoading(true);
+    setCharacterError(false);
+    try {
+      const response = await fetch('/api/personagens', { signal });
+      if (!response.ok) {
+        throw new Error('Erro ao carregar personagens');
+      }
+      const data: CharacterOption[] = await response.json();
+      if (!data.length) {
+        throw new Error('Não há personagens cadastrados');
+      }
+      setCharacters(data);
+      try {
+        setCharacterSlug(
+          readCharacterPreference(
+            localStorage.getItem(CHARACTER_PREFERENCE_KEY),
+            data.map(({ slug }) => slug),
+          ),
+        );
+      } catch {
+        // O sorteio continua disponível se o navegador bloquear o armazenamento.
+        setCharacterSlug(null);
+      }
+    } catch (error) {
+      if (!signal?.aborted) {
+        console.error('Erro ao carregar personagens:', error);
+        setCharacterError(true);
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setCharactersLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchCharacters(controller.signal);
+
+    return () => controller.abort();
+  }, []);
+
   useEffect(() => {
     loadData();
+    setIsSpinning(false);
+    spinInProgressRef.current = false;
+    setSpinRequest(null);
+    setWinner(null);
 
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-      }
+      cancelWinnerAudio();
     };
   }, [teamId]);
 
-  useEffect(() => {
-    localStorage.setItem('roulette-mode', mode);
-  }, [mode]);
-  useEffect(() => {
-    localStorage.setItem('roulette-sound', soundSelect);
-  }, [soundSelect]);
+  const changeCharacter = (slug: string | null): void => {
+    if (spinInProgressRef.current) {
+      return;
+    }
+    cancelWinnerAudio();
+    setSpinRequest(null);
+    setCharacterSlug(slug);
+    try {
+      localStorage.setItem(
+        CHARACTER_PREFERENCE_KEY,
+        serializeCharacterPreference(slug),
+      );
+    } catch {
+      console.warn(
+        'Não foi possível salvar a preferência de voz neste navegador.',
+      );
+    }
+  };
 
   const updatePoints = async (
     id: number,
@@ -219,31 +282,33 @@ export default function TeamRoulettePage() {
   };
 
   const playSpinSound = (): void => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = null;
-    }
-
-    if (mode !== '3d' || soundSelect === 'sem-som') {
+    if (!selectedCharacter) {
       return;
     }
 
-    const audio = new Audio(`/sounds/${soundSelect}.mp3`);
+    const source =
+      mode === '3d' ? '/sounds/silvio.mp3' : '/sounds/tick-tick.mp3';
+    const audio = new Audio(source);
     audioRef.current = audio;
     void audio.play().catch(() => {});
   };
 
-  const requestWinnerAudio = async (nome: string): Promise<Blob | null> => {
+  const requestWinnerAudio = async (
+    pessoa: Pessoa,
+    slug: string,
+    signal: AbortSignal,
+  ): Promise<Blob | null> => {
     try {
-      const response = await fetch('/api/silvio-winner', {
+      const response = await fetch('/api/winner-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, timeId: teamId }),
+        body: JSON.stringify({
+          nome: pessoa.nome,
+          timeId: teamId,
+          characterSlug: slug,
+          pontos: pessoa.pontos,
+        }),
+        signal,
       });
 
       if (!response.ok) {
@@ -253,9 +318,11 @@ export default function TeamRoulettePage() {
         throw new Error(data?.error || `Erro ${response.status}`);
       }
 
-      return response.blob();
+      return await response.blob();
     } catch (error) {
-      console.error('Erro ao preparar a chamada do vencedor:', error);
+      if (!signal.aborted) {
+        console.error('Erro ao preparar a chamada do vencedor:', error);
+      }
 
       return null;
     }
@@ -278,6 +345,7 @@ export default function TeamRoulettePage() {
       return;
     }
 
+    stopAudio();
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
     audioUrlRef.current = audioUrl;
@@ -301,86 +369,87 @@ export default function TeamRoulettePage() {
     });
   };
 
-  const spinRoulette = (): void => {
-    if (isSpinning || pessoas.length === 0) {
+  const handleSpinEnd = (): void => {
+    if (!spinInProgressRef.current) {
       return;
     }
-
-    setIsSpinning(true);
-    setWinner(null);
-
-    if (mode === '2d') {
-      playSpinSound();
-
-      const finalRotation = rotation2D + 1080 + Math.random() * 1080;
-      const duration = 10000;
-      const startTime = Date.now();
-      const startRotation = rotation2D;
-
-      const animate = (): void => {
-        const currentTime = Date.now();
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        const currentRotation =
-          startRotation + (finalRotation - startRotation) * easeOut;
-
-        setRotation2D(currentRotation);
-
-        if (progress < 1) {
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          setIsSpinning(false);
-
-          const normalizedRotation = (360 - (currentRotation % 360)) % 360;
-          const anglePerSlice = 360 / pessoas.length;
-          const winnerIndex = Math.floor(normalizedRotation / anglePerSlice);
-          const winnerPerson = pessoas[winnerIndex];
-
-          setWinner(winnerPerson);
-          updatePoints(winnerPerson.id, 'sorteio');
-        }
-      };
-
-      animationRef.current = requestAnimationFrame(animate);
-    } else {
-      const targetIndex = Math.floor(Math.random() * pessoas.length);
-      const winnerPerson = pessoas[targetIndex];
-      currentWinnerIndexRef.current = targetIndex;
-      spinIdRef.current += 1;
-
-      if (soundSelect === 'silvio') {
-        generatedAudioRef.current = {
-          spinId: spinIdRef.current,
-          promise: requestWinnerAudio(winnerPerson.nome),
-        };
-      } else {
-        generatedAudioRef.current = null;
-      }
-
-      playSpinSound();
-
-      setSpinRequest({ id: spinIdRef.current, targetIndex });
-    }
-  };
-
-  const handleSpinEnd = (): void => {
+    spinInProgressRef.current = false;
     setIsSpinning(false);
+    stopAudio();
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-
-    const winnerPerson = pessoas[currentWinnerIndexRef.current];
+    const winnerPerson = currentWinnerRef.current;
     if (!winnerPerson) {
       return;
     }
 
     setWinner(winnerPerson);
-    updatePoints(winnerPerson.id, 'sorteio');
+    void updatePoints(winnerPerson.id, 'sorteio');
     void playWinnerAudio(spinIdRef.current);
+  };
+
+  const spinRoulette = (): void => {
+    if (
+      spinInProgressRef.current ||
+      pessoas.length === 0 ||
+      charactersLoading
+    ) {
+      return;
+    }
+
+    cancelWinnerAudio();
+    spinInProgressRef.current = true;
+    setIsSpinning(true);
+    setWinner(null);
+    spinIdRef.current += 1;
+
+    // A roleta 2D usa a mesma rotação e o mesmo ponteiro para prever o resultado.
+    const finalRotation = rotation2D + 1080 + Math.random() * 1080;
+    const normalizedRotation = (360 - (finalRotation % 360)) % 360;
+    const targetIndex =
+      mode === '2d'
+        ? Math.min(
+            pessoas.length - 1,
+            Math.floor(normalizedRotation / (360 / pessoas.length)),
+          )
+        : Math.floor(Math.random() * pessoas.length);
+    const winnerPerson = pessoas[targetIndex];
+    currentWinnerRef.current = winnerPerson;
+
+    if (selectedCharacter) {
+      const controller = new AbortController();
+      voiceAbortRef.current = controller;
+      generatedAudioRef.current = {
+        spinId: spinIdRef.current,
+        promise: requestWinnerAudio(
+          winnerPerson,
+          selectedCharacter.slug,
+          controller.signal,
+        ),
+      };
+    }
+    playSpinSound();
+
+    if (mode === '3d') {
+      setSpinRequest({ id: spinIdRef.current, targetIndex });
+
+      return;
+    }
+
+    const duration = 10000;
+    const startTime = Date.now();
+    const startRotation = rotation2D;
+    const animate = (): void => {
+      const progress = Math.min((Date.now() - startTime) / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      setRotation2D(startRotation + (finalRotation - startRotation) * easeOut);
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        animationRef.current = null;
+        handleSpinEnd();
+      }
+    };
+    animationRef.current = requestAnimationFrame(animate);
   };
 
   if (!Number.isInteger(teamId) || teamId <= 0) {
@@ -451,9 +520,9 @@ export default function TeamRoulettePage() {
 
             <button
               onClick={spinRoulette}
-              disabled={isSpinning || pessoas.length === 0}
+              disabled={isSpinning || pessoas.length === 0 || charactersLoading}
               className={`mt-6 w-full max-w-md py-4 px-8 rounded-lg font-bold text-xl transition-all duration-200 ${
-                isSpinning || pessoas.length === 0
+                isSpinning || pessoas.length === 0 || charactersLoading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'cursor-pointer bg-linear-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}
@@ -463,64 +532,43 @@ export default function TeamRoulettePage() {
           </div>
 
           <div>
-            <PersonList
-              pessoas={pessoas}
-              configs={configs}
-              onUpdatePoints={updatePoints}
-              onDeletePerson={deletePerson}
-              onAddPerson={addPerson}
-              onClearAllPoints={clearAllPoints}
-            />
+            <fieldset
+              disabled={isSpinning}
+              className="min-w-0 [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50"
+            >
+              <PersonList
+                pessoas={pessoas}
+                configs={configs}
+                onUpdatePoints={updatePoints}
+                onDeletePerson={deletePerson}
+                onAddPerson={addPerson}
+                onClearAllPoints={clearAllPoints}
+              />
+            </fieldset>
 
-            <div className="mt-4 flex items-center justify-between gap-4">
-              <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1 shadow-sm">
-                <button
-                  onClick={() => setMode('3d')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mode === '3d' ? SELECTED_BTN : UNSELECTED_BTN
-                  }`}
-                >
-                  3D
-                </button>
-                <button
-                  onClick={() => setMode('2d')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mode === '2d' ? SELECTED_BTN : UNSELECTED_BTN
-                  }`}
-                >
-                  2D
-                </button>
-              </div>
-
-              {mode === '3d' && (
-                <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1 shadow-sm">
+            <div className="mt-4 rounded-lg bg-white p-4 shadow-sm">
+              <CharacterSelect
+                characters={characters}
+                value={characterSlug}
+                onChange={changeCharacter}
+                disabled={isSpinning || charactersLoading}
+              />
+              {charactersLoading && (
+                <p className="mt-2 text-sm text-gray-600" role="status">
+                  Carregando vozes...
+                </p>
+              )}
+              {characterError && (
+                <p className="mt-2 text-sm text-gray-600" role="status">
+                  Não foi possível carregar as vozes. Você pode sortear sem som.{' '}
                   <button
-                    onClick={() => setSoundSelect('silvio')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      soundSelect === 'silvio' ? SELECTED_BTN : UNSELECTED_BTN
-                    }`}
+                    type="button"
+                    className="cursor-pointer text-purple-700 underline"
+                    onClick={() => void fetchCharacters()}
                   >
-                    Silvio
+                    Tentar novamente
                   </button>
-                  <button
-                    onClick={() => setSoundSelect('tick-tick')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      soundSelect === 'tick-tick'
-                        ? SELECTED_BTN
-                        : UNSELECTED_BTN
-                    }`}
-                  >
-                    Tick-Tick
-                  </button>
-                  <button
-                    onClick={() => setSoundSelect('sem-som')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      soundSelect === 'sem-som' ? SELECTED_BTN : UNSELECTED_BTN
-                    }`}
-                  >
-                    Sem som
-                  </button>
-                </div>
+                </p>
               )}
             </div>
           </div>

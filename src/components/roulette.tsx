@@ -164,12 +164,12 @@ export const Roulette: React.FC<RouletteProps> = ({ pessoas, rotation }) => {
   };
 
   return (
-    <div className="bg-white rounded-full p-4 shadow-2xl">
+    <div className="w-full max-w-[432px] bg-white rounded-full p-4 shadow-2xl">
       <canvas
         ref={canvasRef}
         width={400}
         height={400}
-        className="rounded-full"
+        className="h-auto w-full rounded-full"
       />
     </div>
   );

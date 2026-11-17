@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
 
-import { reserveSilvioPhraseTheme } from '~/db/silvio-phrases';
+import { reserveCharacterPhrase } from '~/db/characters';
 import {
-  buildSilvioPhraseMessages,
+  buildWinnerPhraseMessages,
+  parseWinnerVoiceRequest,
   type ChatMessage,
-} from '~/lib/silvio-phrases';
+} from '~/lib/winner-phrases';
 
 export const runtime = 'nodejs';
 
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const FISH_SPEECH_URL = 'https://api.fish.audio/v1/tts';
-const MAX_WINNER_NAME_LENGTH = 120;
 const TEXT_GENERATION_TIMEOUT_MS = 5000;
 
 type OpenRouterChatResponse = {
@@ -155,17 +155,10 @@ export async function POST(
   const groqTextModel = process.env.GROQ_TEXT_MODEL;
   const fishApiKey = process.env.FISH_API_KEY;
   const fishTtsModel = process.env.FISH_TTS_MODEL;
-  const fishVoiceId = process.env.FISH_VOICE_ID;
 
-  if (
-    !openRouterApiKey ||
-    !textModel ||
-    !fishApiKey ||
-    !fishTtsModel ||
-    !fishVoiceId
-  ) {
+  if (!openRouterApiKey || !textModel || !fishApiKey || !fishTtsModel) {
     console.error(
-      'Configure OPENROUTER_API_KEY, OPENROUTER_TEXT_MODEL, FISH_API_KEY, FISH_TTS_MODEL e FISH_VOICE_ID.',
+      'Configure OPENROUTER_API_KEY, OPENROUTER_TEXT_MODEL, FISH_API_KEY e FISH_TTS_MODEL.',
     );
 
     return NextResponse.json(
@@ -174,13 +167,9 @@ export async function POST(
     );
   }
 
-  let winnerName: string;
-  let timeId: number;
-
+  let body: unknown;
   try {
-    const body = (await request.json()) as { nome?: unknown; timeId?: unknown };
-    winnerName = typeof body.nome === 'string' ? body.nome.trim() : '';
-    timeId = typeof body.timeId === 'number' ? body.timeId : NaN;
+    body = await request.json();
   } catch {
     return NextResponse.json(
       { error: 'Corpo da requisição inválido.' },
@@ -188,31 +177,44 @@ export async function POST(
     );
   }
 
-  if (!winnerName || winnerName.length > MAX_WINNER_NAME_LENGTH) {
+  const winner = parseWinnerVoiceRequest(body);
+  if (!winner) {
     return NextResponse.json(
-      { error: 'O nome do vencedor é inválido.' },
-      { status: 400 },
-    );
-  }
-
-  if (!Number.isSafeInteger(timeId) || timeId <= 0) {
-    return NextResponse.json(
-      { error: 'timeId é obrigatório e deve ser válido.' },
+      {
+        error:
+          'Informe nome, timeId, characterSlug e pontos anteriores ao sorteio válidos.',
+      },
       { status: 400 },
     );
   }
 
   try {
-    const theme = await reserveSilvioPhraseTheme(timeId);
+    const now = new Date();
+    const selection = await reserveCharacterPhrase(
+      winner.timeId,
+      winner.characterSlug,
+      now,
+    );
 
-    if (!theme) {
+    if (selection.status !== 'ok') {
       return NextResponse.json(
-        { error: 'Time não encontrado.' },
+        {
+          error:
+            selection.status === 'team-not-found'
+              ? 'Time não encontrado.'
+              : 'Personagem não encontrado.',
+        },
         { status: 404 },
       );
     }
 
-    const messages = buildSilvioPhraseMessages(winnerName, theme);
+    const messages = buildWinnerPhraseMessages(
+      winner,
+      selection.character,
+      selection.phrase,
+      selection.theme,
+      now,
+    );
     let phrase: string;
 
     try {
@@ -249,10 +251,11 @@ export async function POST(
       },
       body: JSON.stringify({
         text: phrase,
-        reference_id: fishVoiceId,
+        reference_id: selection.character.fish_voice_id,
         format: 'mp3',
       }),
       cache: 'no-store',
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!audioResponse.ok) {
