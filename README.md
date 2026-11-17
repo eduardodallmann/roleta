@@ -1,6 +1,7 @@
 # Roleta de pontuação
 
-Aplicação Next.js com PostgreSQL. Copie `.env.example` para `.env.local`, configure
+Aplicação Next.js com PostgreSQL. Use Node.js 24, conforme `.nvmrc`.
+Copie `.env.example` para `.env.local`, configure
 `DATABASE_URL` e execute `pnpm install` e `pnpm dev`.
 
 ## Personagens e vozes
@@ -117,6 +118,11 @@ equipe/personagem para evitar repetição consecutiva quando há alternativas,
 inclusive em requisições simultâneas. Falhas de geração mantêm a reserva.
 
 ## Verificação
+
+O script de build executa o lint explicitamente, preservando essa validação após
+a atualização para Next.js 16. Os tipos de Node.js acompanham a versão 24.
+O ESLint permanece na série 9 por compatibilidade com `eslint-plugin-react`;
+o TypeScript fica limitado à série 6.0, suportada por `@typescript-eslint`.
 
 ```sh
 pnpm test
