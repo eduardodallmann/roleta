@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS personagens (
   nome TEXT NOT NULL CHECK (btrim(nome) <> ''),
   fish_voice_id TEXT NOT NULL UNIQUE CHECK (fish_voice_id ~ '^[a-f0-9]{32}$'),
   imagem BYTEA,
+  imagem_hash TEXT GENERATED ALWAYS AS (
+    CASE WHEN octet_length(imagem) > 0 THEN encode(sha256(imagem), 'hex') END
+  ) STORED,
   estilo TEXT NOT NULL CHECK (btrim(estilo) <> ''),
   ordem INTEGER NOT NULL DEFAULT 0
 );
@@ -32,6 +35,7 @@ CREATE TABLE IF NOT EXISTS personagem_historico (
 
 COMMENT ON COLUMN personagens.fish_voice_id IS 'Referência externa do Fish Audio; nunca é a identidade interna do personagem.';
 COMMENT ON COLUMN personagens.imagem IS 'Opcional: conteúdo binário da imagem (PNG, JPEG, GIF, WebP ou AVIF).';
+COMMENT ON COLUMN personagens.imagem_hash IS 'SHA-256 da imagem, calculado automaticamente na gravação para versionar a URL de cache.';
 COMMENT ON COLUMN personagem_frases.origem IS 'original = adaptação criada para a roleta; referencia = bordão com fonte consultada.';
 
 INSERT INTO personagens (slug, nome, fish_voice_id, estilo, ordem) VALUES

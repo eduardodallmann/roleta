@@ -2,7 +2,7 @@ export type CharacterOption = {
   id: number;
   slug: string;
   nome: string;
-  // Endereço da rota que serve o blob; o banco armazena a coluna imagem (BYTEA).
+  // URL versionada pelo hash do blob armazenado na coluna imagem (BYTEA).
   imagem_url: string | null;
   mode: '2d' | '3d';
 };

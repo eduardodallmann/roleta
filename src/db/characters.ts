@@ -12,8 +12,9 @@ import { pool } from './pool';
 export const listCharacters = async (): Promise<CharacterOption[]> => {
   const { rows } = await pool.query<CharacterOption>(
     `SELECT id, slug, nome,
-       CASE WHEN octet_length(imagem) > 0
-         THEN '/api/personagens/' || id || '/imagem' ELSE NULL END AS imagem_url,
+       CASE WHEN imagem_hash IS NOT NULL
+         THEN '/api/personagens/' || id || '/imagem?v=' || imagem_hash
+         ELSE NULL END AS imagem_url,
        CASE WHEN fish_voice_id = '3602d43a7e444ea8822bec77598e5617'
          THEN '3d' ELSE '2d' END AS mode
      FROM personagens ORDER BY ordem, id`,
@@ -22,13 +23,20 @@ export const listCharacters = async (): Promise<CharacterOption[]> => {
   return rows;
 };
 
-export const getCharacterImage = async (id: number): Promise<Buffer | null> => {
-  const { rows } = await pool.query<{ imagem: Buffer | null }>(
-    'SELECT imagem FROM personagens WHERE id = $1',
+type CharacterImage = {
+  imagem: Buffer | null;
+  imagem_hash: string | null;
+};
+
+export const getCharacterImage = async (
+  id: number,
+): Promise<CharacterImage | null> => {
+  const { rows } = await pool.query<CharacterImage>(
+    'SELECT imagem, imagem_hash FROM personagens WHERE id = $1',
     [id],
   );
 
-  return rows[0]?.imagem ?? null;
+  return rows[0] ?? null;
 };
 
 type PhraseHistory = {

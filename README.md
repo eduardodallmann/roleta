@@ -18,7 +18,11 @@ Se já aplicou a versão anterior com a coluna `imagem_url`, execute
 Esse `ALTER TABLE` adiciona `imagem BYTEA`, mantendo eventuais URLs antigas
 preservadas na coluna anterior, que o aplicativo não usa mais.
 
-O arquivo cria as tabelas e insere **48 personagens e 153 referências**:
+Para ativar o cache em um banco já criado, execute também
+**[sql/003-personagens-imagem-cache.sql](sql/003-personagens-imagem-cache.sql)**.
+Novos bancos já recebem essa estrutura pelo SQL inicial.
+
+O SQL inicial cria as tabelas e insere **48 personagens e 153 referências**:
 
 - `personagens`: ID numérico próprio, `slug` estável, nome, `fish_voice_id`,
   `imagem BYTEA` opcional, estilo para a IA e ordem de exibição.
@@ -71,6 +75,25 @@ bytes do arquivo. A rota `GET /api/personagens/{id}/imagem` entrega o blob com o
 `Content-Type` correspondente. O catálogo retorna apenas o endereço dessa rota,
 sem incluir os binários ou base64 no JSON. Sem imagem ou se o arquivo falhar,
 o seletor exibe o ícone padrão.
+
+O endereço inclui `?v=HASH`, com o SHA-256 da imagem. A coluna gerada
+`imagem_hash` é calculada e armazenada pelo PostgreSQL sempre que a imagem é
+gravada, inclusive em alterações diretas pelo gerenciador do banco ou SQL.
+Não preencha essa coluna manualmente. Imagens existentes recebem seu hash ao
+aplicar a migração; imagens ausentes ou vazias não geram endereço.
+
+As respostas da URL versionada usam `Cache-Control: public, max-age=31536000,
+immutable`: o navegador pode reaproveitar a imagem por um ano sem consultar o
+servidor a cada abertura do seletor. Ao trocar a imagem, o hash e o endereço mudam;
+reabra a página para carregar o catálogo atualizado. O catálogo continua sem cache,
+e sua consulta lê o hash já armazenado, sem transferir as imagens do banco.
+Regravar os mesmos bytes mantém o mesmo endereço.
+
+Endereços sem versão ou com uma versão antiga redirecionam temporariamente para
+o endereço atual, sem cache no redirecionamento. Erros também não ficam em cache.
+Assim, um endereço antigo nunca recebe os bytes de outra versão com cache longo.
+Em ferramentas de desenvolvimento, respostas reaproveitadas podem aparecer como
+`memory cache` ou `disk cache`; mantenha “Disable cache” desmarcado para conferir.
 
 Os tipos são `bordao`, `frase` e `piada`. Os espaços disponíveis nas referências são
 `{nome}`, `{pontos}` (total após ganhar um ponto), `{pontos_antes}`, `{horario}` e

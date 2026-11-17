@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 import { Pool } from 'pg';
+import QRCode from 'qrcode';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -28,10 +29,20 @@ test(
       'sql/002-personagens-imagem-blob.sql',
       'utf8',
     );
+    const cacheMigration = await readFile(
+      'sql/003-personagens-imagem-cache.sql',
+      'utf8',
+    );
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
       'base64',
     );
+    const imageHash = createHash('sha256').update(png).digest('hex');
+    const updatedPng = await QRCode.toBuffer('nova imagem', {
+      type: 'png',
+      width: 32,
+      margin: 0,
+    });
     try {
       await pool.query(
         'CREATE TABLE times (id INTEGER PRIMARY KEY); INSERT INTO times VALUES (1), (2)',
@@ -42,11 +53,13 @@ test(
         'migração para BYTEA preserva o cadastro e pode ser reaplicada',
         async () => {
           // Reproduz a coluna de texto da versão anterior, antes de qualquer upload.
-          await pool.query(`ALTER TABLE personagens RENAME COLUMN imagem TO imagem_url;
+          await pool.query(`ALTER TABLE personagens DROP COLUMN imagem_hash;
+          ALTER TABLE personagens RENAME COLUMN imagem TO imagem_url;
           ALTER TABLE personagens ALTER COLUMN imagem_url TYPE TEXT USING imagem_url::text;
           UPDATE personagens SET imagem_url = '/antiga.webp' WHERE slug = 'chaves'`);
           await pool.query(imageMigration);
           await pool.query(imageMigration);
+          await pool.query(cacheMigration);
           const { rows } = await pool.query(
             "SELECT imagem, imagem_url, pg_typeof(imagem)::text AS tipo FROM personagens WHERE slug = 'chaves'",
           );
@@ -60,6 +73,24 @@ test(
               ?.imagem_url,
             null,
           );
+        },
+      );
+
+      await t.test(
+        'migração de cache calcula o hash das imagens existentes sem alterar os bytes',
+        async () => {
+          await pool.query('ALTER TABLE personagens DROP COLUMN imagem_hash');
+          await pool.query(
+            "UPDATE personagens SET imagem = $1 WHERE slug = 'chaves'",
+            [png],
+          );
+          await pool.query(cacheMigration);
+          await pool.query(cacheMigration);
+          const { rows } = await pool.query(
+            "SELECT imagem, imagem_hash FROM personagens WHERE slug = 'chaves'",
+          );
+          assert.equal(rows[0].imagem_hash, imageHash);
+          assert.deepEqual(rows[0].imagem, png);
         },
       );
 
@@ -84,7 +115,7 @@ test(
           assert.ok(catalog.every(({ id }) => Number.isInteger(id)));
           assert.equal(
             catalog.find(({ slug }) => slug === 'chaves')?.imagem_url,
-            `/api/personagens/${catalog.find(({ slug }) => slug === 'chaves')?.id}/imagem`,
+            `/api/personagens/${catalog.find(({ slug }) => slug === 'chaves')?.id}/imagem?v=${imageHash}`,
           );
           assert.deepEqual(
             catalog.filter(({ mode }) => mode === '3d').map(({ slug }) => slug),
@@ -92,6 +123,7 @@ test(
           );
           const response = await GET();
           assert.equal(response.status, 200);
+          assert.equal(response.headers.get('Cache-Control'), 'no-store');
           assert.ok(
             (await response.json()).every(
               (row: object) => !('fish_voice_id' in row),
@@ -107,14 +139,22 @@ test(
             ({ slug }) => slug === 'chaves',
           );
           assert.ok(chaves);
-          const readImage = (id: string) =>
-            getImage(new Request('http://localhost'), {
-              params: Promise.resolve({ id }),
-            });
-          const response = await readImage(String(chaves.id));
+          const readImage = (id: string, version?: string) =>
+            getImage(
+              new Request(
+                `http://localhost/api/personagens/${id}/imagem${version ? `?v=${version}` : ''}`,
+              ),
+              {
+                params: Promise.resolve({ id }),
+              },
+            );
+          const response = await readImage(String(chaves.id), imageHash);
           assert.equal(response.status, 200);
           assert.equal(response.headers.get('Content-Type'), 'image/png');
-          assert.equal(response.headers.get('Cache-Control'), 'no-store');
+          assert.equal(
+            response.headers.get('Cache-Control'),
+            'public, max-age=31536000, immutable',
+          );
           assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
           assert.equal((await readImage('1')).status, 404);
           assert.equal((await readImage('999')).status, 404);
@@ -138,6 +178,87 @@ test(
             png,
             chaves.id,
           ]);
+        },
+      );
+
+      await t.test(
+        'trocar a imagem por SQL muda a URL e versões antigas redirecionam sem cache',
+        async () => {
+          const original = (await listCharacters()).find(
+            ({ slug }) => slug === 'chaves',
+          );
+          assert.ok(original?.imagem_url);
+          const readImage = (path: string) =>
+            getImage(new Request(`http://localhost${path}`), {
+              params: Promise.resolve({ id: String(original.id) }),
+            });
+
+          await pool.query('UPDATE personagens SET imagem = $1 WHERE id = $2', [
+            updatedPng,
+            original.id,
+          ]);
+          const updated = (await listCharacters()).find(
+            ({ id }) => id === original.id,
+          );
+          assert.ok(updated?.imagem_url);
+          assert.notEqual(updated.imagem_url, original.imagem_url);
+          assert.ok(
+            updated.imagem_url.endsWith(
+              createHash('sha256').update(updatedPng).digest('hex'),
+            ),
+          );
+          const fresh = await readImage(updated.imagem_url);
+          assert.equal(fresh.status, 200);
+          assert.equal(
+            fresh.headers.get('Cache-Control'),
+            'public, max-age=31536000, immutable',
+          );
+          assert.deepEqual(Buffer.from(await fresh.arrayBuffer()), updatedPng);
+
+          for (const path of [
+            original.imagem_url,
+            `/api/personagens/${original.id}/imagem`,
+            `/api/personagens/${original.id}/imagem?v=qualquer`,
+          ]) {
+            const response = await readImage(path);
+            assert.equal(response.status, 307);
+            assert.equal(
+              response.headers.get('Location'),
+              `http://localhost${updated.imagem_url}`,
+            );
+            assert.equal(response.headers.get('Cache-Control'), 'no-store');
+          }
+
+          await pool.query(
+            'UPDATE personagens SET imagem = $1, nome = nome WHERE id = $2',
+            [updatedPng, original.id],
+          );
+          assert.equal(
+            (await listCharacters()).find(({ id }) => id === original.id)
+              ?.imagem_url,
+            updated.imagem_url,
+          );
+          await pool.query(
+            'UPDATE personagens SET imagem = NULL WHERE id = $1',
+            [original.id],
+          );
+          assert.equal(
+            (await listCharacters()).find(({ id }) => id === original.id)
+              ?.imagem_url,
+            null,
+          );
+          const missing = await readImage(updated.imagem_url);
+          assert.equal(missing.status, 404);
+          assert.equal(missing.headers.get('Cache-Control'), 'no-store');
+          await pool.query('UPDATE personagens SET imagem = $1 WHERE id = $2', [
+            png,
+            original.id,
+          ]);
+          assert.equal(
+            (await listCharacters()).find(({ id }) => id === original.id)
+              ?.imagem_url,
+            original.imagem_url,
+          );
         },
       );
 
